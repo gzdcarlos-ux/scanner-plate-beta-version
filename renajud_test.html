@@ -1,0 +1,374 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1">
+<title>Teste — Consulta de Restrição (arquitetura em camadas)</title>
+<style>
+  :root{
+    --bg:#0f1117; --card-bg:#1a1d29; --border:#2a2e3f; --text:#e8e9ee; --text-dim:#9498a8;
+    --accent:#5b7cfa; --accent-hover:#4a6bef;
+    --green:#1f8f5f; --green-bg:#132a20; --green-border:#2a5f43;
+    --red:#e5484d; --red-bg:#2a1416; --red-border:#5c2328;
+    --amber:#e5a63d; --amber-bg:#2a2313; --amber-border:#5c4a23;
+    --radius:16px;
+  }
+  *{ box-sizing:border-box; margin:0; padding:0; }
+  body{
+    background:var(--bg); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+    min-height:100vh; display:flex; align-items:flex-start; justify-content:center; padding:24px 16px;
+  }
+  .app{ width:100%; max-width:460px; }
+  header{ text-align:center; margin-bottom:20px; }
+  header h1{ font-size:1.3rem; font-weight:700; letter-spacing:-0.02em; }
+  header p{ color:var(--text-dim); font-size:0.82rem; margin-top:4px; }
+
+  .card{ background:var(--card-bg); border:1px solid var(--border); border-radius:var(--radius); padding:18px; margin-bottom:14px; }
+  .card h2{ font-size:0.78rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-dim); margin-bottom:10px; }
+
+  .provider-toggle{ display:flex; gap:8px; flex-wrap:wrap; margin-bottom:4px; }
+  .provider-toggle label{
+    display:flex; align-items:center; gap:6px; font-size:0.78rem;
+    background:#10121a; border:1px solid var(--border); padding:6px 10px; border-radius:8px; cursor:pointer;
+  }
+  .provider-toggle input{ accent-color: var(--accent); }
+
+  textarea#localDataset{
+    width:100%; min-height:90px; background:#10121a; border:1px solid var(--border); color:var(--text);
+    border-radius:10px; padding:10px; font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.78rem;
+    resize:vertical;
+  }
+  .card .hint{ font-size:0.72rem; color:var(--text-dim); margin-top:8px; line-height:1.4; }
+
+  label.field-label{ display:block; font-size:0.75rem; color:var(--text-dim); margin-bottom:8px; text-transform:uppercase; letter-spacing:0.05em; }
+  .input-row{ display:flex; gap:8px; }
+  #plateInput{
+    flex:1; background:#10121a; border:1px solid var(--border); color:var(--text);
+    font-size:1.3rem; font-weight:700; letter-spacing:0.12em; text-align:center;
+    padding:14px 10px; border-radius:10px; text-transform:uppercase; outline:none; transition:border-color .15s ease;
+  }
+  #plateInput:focus{ border-color:var(--accent); }
+  #plateInput::placeholder{ color:#4a4e5e; letter-spacing:0.08em; }
+
+  #searchBtn{
+    background:var(--accent); color:#fff; border:none; border-radius:10px; padding:0 20px;
+    font-size:0.95rem; font-weight:600; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    min-width:64px; transition:background .15s ease, opacity .15s ease;
+  }
+  #searchBtn:hover:not(:disabled){ background:var(--accent-hover); }
+  #searchBtn:disabled{ opacity:0.6; cursor:not-allowed; }
+
+  .spinner{
+    width:18px; height:18px; border:2.5px solid rgba(255,255,255,0.35); border-top-color:#fff;
+    border-radius:50%; animation:spin .7s linear infinite; display:none;
+  }
+  .spinner.active{ display:inline-block; }
+  @keyframes spin{ to{ transform:rotate(360deg); } }
+
+  .hint{ font-size:0.72rem; color:var(--text-dim); margin-top:10px; line-height:1.4; }
+
+  .result-card{ border-radius:var(--radius); padding:20px; display:none; animation:fadeIn .25s ease; border:1px solid; }
+  .result-card.visible{ display:block; }
+  @keyframes fadeIn{ from{opacity:0; transform:translateY(6px);} to{opacity:1; transform:translateY(0);} }
+  .result-card .icon{ font-size:1.8rem; margin-bottom:8px; display:block; }
+  .result-card .title{ font-size:1.05rem; font-weight:700; margin-bottom:6px; }
+  .result-card .desc{ font-size:0.85rem; line-height:1.5; }
+  .result-card .meta{ font-size:0.68rem; opacity:0.65; margin-top:10px; text-transform:uppercase; letter-spacing:0.05em; }
+  .result-card .plate-tag{
+    display:inline-block; font-size:0.75rem; font-weight:700; letter-spacing:0.08em;
+    background:rgba(255,255,255,0.08); padding:3px 8px; border-radius:6px; margin-bottom:10px;
+  }
+  .result-card.success{ background:var(--green-bg); border-color:var(--green-border); }
+  .result-card.success .title{ color:#4ade80; }
+  .result-card.success .desc{ color:#b9e3c9; }
+  .result-card.alert{ background:var(--red-bg); border-color:var(--red-border); }
+  .result-card.alert .title{ color:#ff7b7f; }
+  .result-card.alert .desc{ color:#f3c2c4; }
+  .result-card.error{ background:var(--amber-bg); border-color:var(--amber-border); }
+  .result-card.error .title{ color:var(--amber); }
+  .result-card.error .desc{ color:#e8d3ac; }
+
+  footer{ text-align:center; margin-top:16px; font-size:0.7rem; color:#565a6b; line-height:1.5; }
+</style>
+</head>
+<body>
+
+<div class="app">
+  <header>
+    <h1>Teste de Arquitetura — Providers</h1>
+    <p>Mesma lógica em camadas do app Flutter: Mock → Local → Remoto</p>
+  </header>
+
+  <!-- ===================== PAINEL DE PROVIDERS (só para teste) ===================== -->
+  <div class="card">
+    <h2>Providers ativos (ordem de tentativa)</h2>
+    <div class="provider-toggle">
+      <label><input type="checkbox" id="useMock" checked> 1) Mock (AAA0000/BBB1111)</label>
+      <label><input type="checkbox" id="useLocal" checked> 2) Local (dataset abaixo)</label>
+      <label><input type="checkbox" id="useRemote"> 3) Remoto (API real)</label>
+    </div>
+    <p class="hint">Espelha exatamente a ordem do <code>RenajudService</code> em Dart: só passa para o próximo provider se o anterior responder "não encontrado".</p>
+  </div>
+
+  <!-- ===================== "BASE LOCAL" SIMULADA (equivalente à planilha importada) ===================== -->
+  <div class="card">
+    <h2>Base local simulada (equivalente à planilha .xlsx importada)</h2>
+    <textarea id="localDataset">JBL9D33;Ordem de busca e apreensão - Comarca de Porto Alegre
+ANL2B20;Restrição financeira - alienação vencida
+ABC1234;Restrição de teste manual</textarea>
+    <p class="hint">Formato: <code>PLACA;observação</code> — uma por linha. Isso simula exatamente o resultado da importação do .xlsx feita no app (coluna A = placa, coluna B = observação).</p>
+  </div>
+
+  <!-- ===================== CONFIG DO PROVIDER REMOTO (placeholder) ===================== -->
+  <div class="card" id="remoteConfigCard" style="display:none;">
+    <h2>Config do provider remoto</h2>
+    <p class="hint" style="margin-top:0;">
+      Preencha no <code>&lt;script&gt;</code> abaixo (constante <code>REMOTE_API_CONFIG</code>) a URL e o token
+      da API paga que você contratar (Infosimples, Apify "brasildados" etc.). Aqui é só a interface de teste.
+    </p>
+  </div>
+
+  <!-- ===================== BUSCA ===================== -->
+  <div class="card">
+    <label class="field-label" for="plateInput">Placa do veículo</label>
+    <div class="input-row">
+      <input type="text" id="plateInput" placeholder="ABC-1234" maxlength="8" autocomplete="off" autocapitalize="characters" spellcheck="false">
+      <button id="searchBtn">
+        <span class="spinner" id="spinner"></span>
+        <span id="btnLabel">Buscar</span>
+      </button>
+    </div>
+    <p class="hint">Aceita formato antigo (ABC-1234) e Mercosul (ABC1D23).</p>
+  </div>
+
+  <div class="result-card" id="resultCard">
+    <span class="icon" id="resultIcon"></span>
+    <span class="plate-tag" id="resultPlateTag"></span>
+    <div class="title" id="resultTitle"></div>
+    <div class="desc" id="resultDesc"></div>
+    <div class="meta" id="resultMeta"></div>
+  </div>
+
+  <footer>
+    Ferramenta de teste local — não persiste nem envia dados a nenhum servidor,<br>
+    exceto se você ativar e configurar o provider remoto.
+  </footer>
+</div>
+
+<script>
+/* =============================================================================
+   Esta página replica, em JS puro, a MESMA arquitetura em camadas do app
+   Flutter (lib/core/...):
+
+     RenajudProvider (interface)
+       ├── MockProvider    -> AAA0000 / BBB1111
+       ├── LocalProvider   -> lê o "dataset" simulado (equivalente ao SQLite
+       │                      populado pela planilha .xlsx importada)
+       └── RemoteProvider  -> chamaria a API paga real (Infosimples, etc.)
+
+   O objetivo é validar aqui, no navegador, o comportamento e a UX ANTES de
+   portar 1:1 para o Dart — é por isso que os nomes de função e a ordem de
+   resolução espelham renajud_service.dart.
+   ============================================================================= */
+
+/* ---------- CONFIG DO PROVIDER REMOTO — API Placas (WDAPI2) ----------
+   Documentação: https://apiplacas.com.br/doc.php
+   Formato confirmado: GET https://wdapi2.com.br/consulta/{placa}/{token}
+   (token vai na URL, não em header Authorization)
+------------------------------------------------------------------------- */
+const REMOTE_API_CONFIG = {
+  BASE_HOST: "https://wdapi2.com.br/consulta",
+  TOKEN: "8382cdefbfd65ddd976f78f6aac55ff1",
+  // ⚠️ PENDENTE DE CONFIRMAÇÃO: ajuste depois de ver uma resposta real —
+  // a doc pública não enumera o schema exato do campo "extra".
+  RESTRICTION_FIELD_PATH: "extra.restricoes",
+};
+
+/* ---------- Utilitários de placa (espelham lib/utils/plate_utils.dart) ---------- */
+const PlateUtils = {
+  sanitize(raw){
+    return raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  },
+  isValid(sanitized){
+    const oldPattern = /^[A-Z]{3}[0-9]{4}$/;
+    const mercosulPattern = /^[A-Z]{3}[0-9][A-Z][0-9]{2}$/;
+    return oldPattern.test(sanitized) || mercosulPattern.test(sanitized);
+  }
+};
+
+/* ---------- Provider: Mock (espelha mock_provider.dart) ---------- */
+async function mockProvider(plate){
+  await sleep(300);
+  if (plate === 'AAA0000') return { known:true, hasRestriction:true, observation:'Mock — restrição simulada', source:'mock' };
+  if (plate === 'BBB1111') return { known:true, hasRestriction:false, observation:null, source:'mock' };
+  return { known:false };
+}
+
+/* ---------- Provider: Local (espelha local_provider.dart) ---------- */
+async function localProvider(plate){
+  const raw = document.getElementById('localDataset').value;
+  const lines = raw.split('\n').map(l => l.trim()).filter(Boolean);
+
+  for (const line of lines) {
+    const [rawPlate, ...obsParts] = line.split(';');
+    const linePlate = PlateUtils.sanitize(rawPlate || '');
+    if (linePlate === plate) {
+      return {
+        known: true,
+        hasRestriction: true, // presença no dataset = restrição, igual à lógica do app
+        observation: (obsParts.join(';') || '').trim(),
+        source: 'local'
+      };
+    }
+  }
+  return { known:false };
+}
+
+/* ---------- Provider: Remoto (espelha remote_provider.dart) ---------- */
+async function remoteProvider(plate){
+  try {
+    const url = `${REMOTE_API_CONFIG.BASE_HOST}/${plate}/${REMOTE_API_CONFIG.TOKEN}`;
+
+    const response = await fetch(url, {
+      method: 'GET',
+      headers: { "Content-Type": "application/json" }
+    });
+
+    if (!response.ok) return { known:false, error:true };
+
+    const json = await response.json();
+
+    if (json.erro || json.message) return { known:false }; // placa não encontrada no provider
+
+    const value = getNestedValue(json, REMOTE_API_CONFIG.RESTRICTION_FIELD_PATH);
+    if (value === undefined) {
+      console.warn('[remoteProvider] campo não encontrado. Chaves recebidas:', Object.keys(json));
+      return { known:false, error:true };
+    }
+
+    const hasRestriction = value === true || value === 'S' || value === 1 || value === 'true'
+      || (Array.isArray(value) && value.length > 0);
+
+    // A partir daqui, "json" é descartado por completo — só o booleano segue adiante.
+    return { known:true, hasRestriction, observation:null, source:'remote' };
+
+  } catch (e) {
+    return { known:false, error:true };
+  }
+}
+
+function getNestedValue(obj, path){
+  return path.split('.').reduce((acc, key) => (acc && acc[key] !== undefined) ? acc[key] : undefined, obj);
+}
+
+function sleep(ms){ return new Promise(res => setTimeout(res, ms)); }
+
+/* ---------- Orquestrador (espelha renajud_service.dart) ---------- */
+async function checkPlate(rawInput){
+  const plate = PlateUtils.sanitize(rawInput);
+  if (!PlateUtils.isValid(plate)) {
+    return { plate, known:false, invalid:true };
+  }
+
+  const useMock = document.getElementById('useMock').checked;
+  const useLocal = document.getElementById('useLocal').checked;
+  const useRemote = document.getElementById('useRemote').checked;
+
+  const providers = [];
+  if (useMock)   providers.push(mockProvider);
+  if (useLocal)  providers.push(localProvider);
+  if (useRemote) providers.push(remoteProvider);
+
+  for (const provider of providers) {
+    const result = await provider(plate);
+    if (result.known) {
+      return { plate, ...result };
+    }
+  }
+
+  return { plate, known:false };
+}
+
+/* ---------- UI ---------- */
+const plateInput   = document.getElementById('plateInput');
+const searchBtn    = document.getElementById('searchBtn');
+const spinner      = document.getElementById('spinner');
+const btnLabel     = document.getElementById('btnLabel');
+const resultCard   = document.getElementById('resultCard');
+const resultIcon   = document.getElementById('resultIcon');
+const resultTitle  = document.getElementById('resultTitle');
+const resultDesc   = document.getElementById('resultDesc');
+const resultMeta   = document.getElementById('resultMeta');
+const resultPlateTag = document.getElementById('resultPlateTag');
+const useRemoteCheckbox = document.getElementById('useRemote');
+const remoteConfigCard = document.getElementById('remoteConfigCard');
+
+useRemoteCheckbox.addEventListener('change', () => {
+  remoteConfigCard.style.display = useRemoteCheckbox.checked ? 'block' : 'none';
+});
+
+/* Máscara de placa — igual à do index.html original */
+plateInput.addEventListener('input', (e) => {
+  let value = e.target.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 7);
+  let formatted = value;
+  if (value.length > 4) {
+    const isMercosul = /[A-Z]/.test(value.charAt(4));
+    if (!isMercosul) formatted = value.slice(0, 3) + '-' + value.slice(3);
+  }
+  e.target.value = formatted;
+});
+
+plateInput.addEventListener('keypress', (e) => { if (e.key === 'Enter') searchBtn.click(); });
+
+function setLoading(isLoading){
+  searchBtn.disabled = isLoading;
+  spinner.classList.toggle('active', isLoading);
+  btnLabel.textContent = isLoading ? 'Buscando...' : 'Buscar';
+}
+
+function showResult(state, plate, { title, desc, meta }){
+  resultCard.className = 'result-card visible ' + state;
+  resultPlateTag.textContent = plate;
+  resultIcon.textContent = state === 'success' ? '✅' : '⚠️';
+  resultTitle.textContent = title;
+  resultDesc.textContent = desc;
+  resultMeta.textContent = meta || '';
+}
+
+searchBtn.addEventListener('click', async () => {
+  const plateRaw = plateInput.value;
+
+  setLoading(true);
+  resultCard.classList.remove('visible');
+
+  const result = await checkPlate(plateRaw);
+
+  if (result.invalid || !result.known) {
+    showResult('error', plateRaw || '—', {
+      title: result.invalid ? 'Placa inválida' : 'Não foi possível concluir a consulta',
+      desc: result.invalid
+        ? 'Digite uma placa completa no formato ABC-1234 ou ABC1D23 antes de buscar.'
+        : 'Nenhum provider ativo retornou informação para esta placa (ou houve erro de rede no provider remoto).',
+      meta: ''
+    });
+  } else if (result.hasRestriction) {
+    showResult('alert', plateRaw, {
+      title: 'ALERTA: Restrição encontrada',
+      desc: result.observation || 'Este veículo possui restrição judicial / ordem de busca e apreensão ativa.',
+      meta: 'fonte: ' + result.source
+    });
+  } else {
+    showResult('success', plateRaw, {
+      title: 'Veículo Regularizado',
+      desc: 'Sem restrição de busca ativa encontrada para esta placa.',
+      meta: 'fonte: ' + result.source
+    });
+  }
+
+  setLoading(false);
+});
+</script>
+
+</body>
+</html>
