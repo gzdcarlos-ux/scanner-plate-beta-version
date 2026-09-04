@@ -1,0 +1,47 @@
+name: plate_scanner_app
+description: "Leitor de placas em tempo real com cruzamento contra base local (SQLite) importada de planilha .xlsx."
+publish_to: 'none'
+version: 1.0.0+1
+
+environment:
+  sdk: '>=3.3.0 <4.0.0'
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # UI
+  cupertino_icons: ^1.0.6
+
+  # Câmera + OCR
+  camera: ^0.10.5+9
+  google_mlkit_text_recognition: ^0.13.0
+
+  # Persistência local
+  sqflite: ^2.3.3+1
+  path: ^1.9.0
+  path_provider: ^2.1.4
+
+  # Importação de planilha
+  file_picker: ^8.0.6
+  excel: ^4.0.6
+
+  # Feedback tátil
+  vibration: ^2.0.1
+
+  # Permissões em runtime
+  permission_handler: ^11.3.1
+
+  # Gerenciamento de estado simples
+  provider: ^6.1.2
+
+  # Chamadas HTTP para o provider remoto (API paga de consulta RENAJUD/DETRAN)
+  http: ^1.2.2
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true

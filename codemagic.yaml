@@ -1,0 +1,122 @@
+##############################################################################
+# codemagic.yaml
+#
+# Configuração de build para o Codemagic (https://codemagic.io).
+#
+# Como usar:
+#   1. Suba todo o conteúdo desta pasta (incluindo este arquivo, na raiz do
+#      repositório) para um repositório no GitHub.
+#   2. No Codemagic, conecte esse repositório — como este arquivo já existe
+#      na raiz, o Codemagic detecta e usa esta configuração automaticamente
+#      (não precisa configurar nada pela interface visual).
+#   3. Clique em "Start new build" e escolha o workflow "android-release".
+#   4. Ao final, baixe o .apk gerado na seção "Artifacts" do build.
+#
+# Por que existem os passos de "preservar/restaurar configuração"?
+#   O projeto não inclui os arquivos binários/gerados automaticamente do
+#   Gradle (gradle-wrapper.jar, ícones padrão, MainActivity.kt) porque eles
+#   são gerados pelo próprio `flutter create` e variam conforme a versão do
+#   Flutter instalada na máquina de build. Em vez de versionar binários que
+#   podem ficar desatualizados, o workflow gera esses arquivos automaticamente
+#   a cada build — e depois restaura o AndroidManifest.xml e o build.gradle
+#   customizados deste projeto (permissões de câmera/internet, minSdkVersion
+#   21 etc.), que são o que realmente importa manter sob controle de versão.
+##############################################################################
+
+workflows:
+  android-release:
+    name: Android — Leitor de Placas (Release APK)
+    max_build_duration: 60
+
+    # mac_mini_m2 funciona tanto no plano gratuito quanto pago do Codemagic.
+    # Se você tiver billing habilitado, pode trocar para "linux_x2": builds
+    # Android-only ficam mais rápidos e baratos numa máquina Linux.
+    instance_type: mac_mini_m2
+
+    environment:
+      flutter: stable
+      java: 17
+
+    triggering:
+      events:
+        - push
+      branch_patterns:
+        - pattern: main
+          include: true
+          source: true
+        - pattern: master
+          include: true
+          source: true
+
+    scripts:
+      - name: Preservar configuração customizada do Android
+        script: |
+          mkdir -p /tmp/android_custom
+          cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
+          cp android/app/build.gradle /tmp/android_custom/build.gradle
+
+      - name: Gerar arquivos base do Android (gradle wrapper, ícones, MainActivity)
+        script: |
+          flutter create --platforms=android --org com.example --project-name plate_scanner_app .
+
+      - name: Restaurar configuração customizada (permissões, minSdk 21 etc.)
+        script: |
+          cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp /tmp/android_custom/build.gradle android/app/build.gradle
+
+      - name: Instalar dependências Flutter
+        script: flutter pub get
+
+      - name: Analisar código (não falha o build, só reporta)
+        script: flutter analyze || true
+
+      - name: Build do APK (release)
+        script: flutter build apk --release
+
+    artifacts:
+      - build/app/outputs/**/*.apk
+
+    # Descomente e preencha para receber um e-mail com o link de download
+    # assim que cada build terminar:
+    #
+    # publishing:
+    #   email:
+    #     recipients:
+    #       - seu-email@exemplo.com
+    #     notify:
+    #       success: true
+    #       failure: true
+
+  android-debug:
+    name: Android — Leitor de Placas (Debug APK, build manual/rápido)
+    max_build_duration: 60
+    instance_type: mac_mini_m2
+    environment:
+      flutter: stable
+      java: 17
+    # Sem "triggering" -> este workflow só roda quando disparado manualmente
+    # pela interface do Codemagic (útil para testar sem esperar o push).
+    scripts:
+      - name: Preservar configuração customizada do Android
+        script: |
+          mkdir -p /tmp/android_custom
+          cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
+          cp android/app/build.gradle /tmp/android_custom/build.gradle
+
+      - name: Gerar arquivos base do Android
+        script: |
+          flutter create --platforms=android --org com.example --project-name plate_scanner_app .
+
+      - name: Restaurar configuração customizada
+        script: |
+          cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+          cp /tmp/android_custom/build.gradle android/app/build.gradle
+
+      - name: Instalar dependências Flutter
+        script: flutter pub get
+
+      - name: Build do APK (debug)
+        script: flutter build apk --debug
+
+    artifacts:
+      - build/app/outputs/**/*.apk
