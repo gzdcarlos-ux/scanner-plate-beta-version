@@ -1,28 +1,3 @@
-##############################################################################
-# codemagic.yaml
-#
-# Configuração de build para o Codemagic (https://codemagic.io).
-#
-# Como usar:
-#   1. Suba todo o conteúdo desta pasta (incluindo este arquivo, na raiz do
-#      repositório) para um repositório no GitHub.
-#   2. No Codemagic, conecte esse repositório — como este arquivo já existe
-#      na raiz, o Codemagic detecta e usa esta configuração automaticamente
-#      (não precisa configurar nada pela interface visual).
-#   3. Clique em "Start new build" e escolha o workflow "android-release".
-#   4. Ao final, baixe o .apk gerado na seção "Artifacts" do build.
-#
-# Por que existem os passos de "preservar/restaurar configuração"?
-#   O projeto não inclui os arquivos binários/gerados automaticamente do
-#   Gradle (gradle-wrapper.jar, ícones padrão, MainActivity.kt) porque eles
-#   são gerados pelo próprio `flutter create` e variam conforme a versão do
-#   Flutter instalada na máquina de build. Em vez de versionar binários que
-#   podem ficar desatualizados, o workflow gera esses arquivos automaticamente
-#   a cada build — e depois restaura o AndroidManifest.xml e o build.gradle
-#   customizados deste projeto (permissões de câmera/internet, minSdkVersion
-#   21 etc.), que são o que realmente importa manter sob controle de versão.
-##############################################################################
-
 workflows:
   android-release:
     name: Android — Leitor de Placas (Release APK)
@@ -49,20 +24,42 @@ workflows:
           source: true
 
     scripts:
-      - name: Preservar configuração customizada do Android
+      - name: Diagnóstico — verificar estrutura do repositório
+        script: |
+          echo "Diretório atual (raiz do checkout): $(pwd)"
+          echo "--- Conteúdo da raiz ---"
+          ls -la
+          echo "--- pubspec.yaml existe na raiz? ---"
+          test -f pubspec.yaml && echo "OK: pubspec.yaml encontrado" || echo "PROBLEMA: pubspec.yaml NÃO está na raiz do repositório"
+          echo "--- pasta android/ existe? ---"
+          find . -maxdepth 4 -iname "AndroidManifest.xml" 2>/dev/null || echo "Nenhum AndroidManifest.xml encontrado em lugar nenhum do repositório"
+
+      - name: Preservar configuração customizada do Android (se existir)
         script: |
           mkdir -p /tmp/android_custom
-          cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
-          cp android/app/build.gradle /tmp/android_custom/build.gradle
+          if [ -f "android/app/src/main/AndroidManifest.xml" ] && [ -f "android/app/build.gradle" ]; then
+            cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
+            cp android/app/build.gradle /tmp/android_custom/build.gradle
+            echo "OK: configuração customizada encontrada e salva em /tmp/android_custom."
+          else
+            echo "AVISO: android/app/src/main/AndroidManifest.xml e/ou android/app/build.gradle não encontrados."
+            echo "O build vai seguir usando os arquivos PADRÃO gerados pelo 'flutter create' (sem as permissões de câmera/internet nem o minSdkVersion 21 customizados)."
+            echo "Isso normalmente significa que a pasta 'android/' não chegou completa no repositório GitHub — veja o passo de Diagnóstico acima."
+          fi
 
       - name: Gerar arquivos base do Android (gradle wrapper, ícones, MainActivity)
         script: |
           flutter create --platforms=android --org com.example --project-name plate_scanner_app .
 
-      - name: Restaurar configuração customizada (permissões, minSdk 21 etc.)
+      - name: Restaurar configuração customizada (se foi salva)
         script: |
-          cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          cp /tmp/android_custom/build.gradle android/app/build.gradle
+          if [ -f "/tmp/android_custom/AndroidManifest.xml" ] && [ -f "/tmp/android_custom/build.gradle" ]; then
+            cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+            cp /tmp/android_custom/build.gradle android/app/build.gradle
+            echo "OK: configuração customizada restaurada."
+          else
+            echo "Seguindo com os arquivos padrão do flutter create (nenhuma customização para restaurar)."
+          fi
 
       - name: Instalar dependências Flutter
         script: flutter pub get
@@ -97,20 +94,36 @@ workflows:
     # Sem "triggering" -> este workflow só roda quando disparado manualmente
     # pela interface do Codemagic (útil para testar sem esperar o push).
     scripts:
-      - name: Preservar configuração customizada do Android
+      - name: Diagnóstico — verificar estrutura do repositório
+        script: |
+          echo "Diretório atual (raiz do checkout): $(pwd)"
+          ls -la
+          test -f pubspec.yaml && echo "OK: pubspec.yaml encontrado" || echo "PROBLEMA: pubspec.yaml NÃO está na raiz do repositório"
+
+      - name: Preservar configuração customizada do Android (se existir)
         script: |
           mkdir -p /tmp/android_custom
-          cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
-          cp android/app/build.gradle /tmp/android_custom/build.gradle
+          if [ -f "android/app/src/main/AndroidManifest.xml" ] && [ -f "android/app/build.gradle" ]; then
+            cp android/app/src/main/AndroidManifest.xml /tmp/android_custom/AndroidManifest.xml
+            cp android/app/build.gradle /tmp/android_custom/build.gradle
+            echo "OK: configuração customizada encontrada e salva."
+          else
+            echo "AVISO: AndroidManifest.xml/build.gradle customizados não encontrados — seguindo com os padrões do flutter create."
+          fi
 
       - name: Gerar arquivos base do Android
         script: |
           flutter create --platforms=android --org com.example --project-name plate_scanner_app .
 
-      - name: Restaurar configuração customizada
+      - name: Restaurar configuração customizada (se foi salva)
         script: |
-          cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
-          cp /tmp/android_custom/build.gradle android/app/build.gradle
+          if [ -f "/tmp/android_custom/AndroidManifest.xml" ] && [ -f "/tmp/android_custom/build.gradle" ]; then
+            cp /tmp/android_custom/AndroidManifest.xml android/app/src/main/AndroidManifest.xml
+            cp /tmp/android_custom/build.gradle android/app/build.gradle
+            echo "OK: configuração customizada restaurada."
+          else
+            echo "Nenhuma customização para restaurar."
+          fi
 
       - name: Instalar dependências Flutter
         script: flutter pub get
