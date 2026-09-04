@@ -1,3 +1,29 @@
+##############################################################################
+# codemagic.yaml
+#
+# Configuração de build para o Codemagic (https://codemagic.io).
+#
+# Como usar:
+#   1. Suba todo o conteúdo desta pasta (incluindo este arquivo, na raiz do
+#      repositório) para um repositório no GitHub.
+#   2. No Codemagic, conecte esse repositório — como este arquivo já existe
+#      na raiz, o Codemagic detecta e usa esta configuração automaticamente
+#      (não precisa configurar nada pela interface visual).
+#   3. Clique em "Start new build" e escolha o workflow "android-release".
+#   4. Ao final, baixe o .apk gerado na seção "Artifacts" do build.
+#
+# Por que existem os passos de "preservar/restaurar configuração"?
+#   O projeto não inclui os arquivos binários/gerados automaticamente do
+#   Gradle (gradle-wrapper.jar, ícones padrão, MainActivity.kt) porque eles
+#   são gerados pelo próprio `flutter create` e variam conforme a versão do
+#   Flutter instalada na máquina de build. Em vez de versionar binários que
+#   podem ficar desatualizados, o workflow gera esses arquivos automaticamente
+#   a cada build, numa pasta TEMPORÁRIA (fora do projeto, pra nunca sobrescrever
+#   lib/, pubspec.yaml etc.) — e depois restaura o AndroidManifest.xml e o
+#   build.gradle customizados deste projeto (permissões de câmera/internet,
+#   minSdkVersion 21 etc.), que são o que realmente importa manter versionado.
+##############################################################################
+
 workflows:
   android-release:
     name: Android — Leitor de Placas (Release APK)
@@ -47,9 +73,17 @@ workflows:
             echo "Isso normalmente significa que a pasta 'android/' não chegou completa no repositório GitHub — veja o passo de Diagnóstico acima."
           fi
 
-      - name: Gerar arquivos base do Android (gradle wrapper, ícones, MainActivity)
+      - name: Gerar arquivos base do Android em pasta temporária (NUNCA dentro do projeto)
         script: |
-          flutter create --platforms=android --org com.example --project-name plate_scanner_app .
+          TEMP_SCAFFOLD=$(mktemp -d)
+          flutter create --platforms=android --org com.example --project-name plate_scanner_app "$TEMP_SCAFFOLD/scaffold"
+          # Copia só o que falta (gradlew, gradle-wrapper.jar, MainActivity.kt, res/, build.gradle raiz,
+          # settings.gradle, gradle.properties) SEM sobrescrever arquivos que já existem no projeto —
+          # é isso que evita que lib/main.dart, pubspec.yaml etc. sejam tocados.
+          cp -rn "$TEMP_SCAFFOLD/scaffold/android/." android/
+          rm -rf "$TEMP_SCAFFOLD"
+          echo "--- Estrutura final de android/ ---"
+          find android -maxdepth 3 -type d | sort
 
       - name: Restaurar configuração customizada (se foi salva)
         script: |
@@ -111,9 +145,12 @@ workflows:
             echo "AVISO: AndroidManifest.xml/build.gradle customizados não encontrados — seguindo com os padrões do flutter create."
           fi
 
-      - name: Gerar arquivos base do Android
+      - name: Gerar arquivos base do Android em pasta temporária (NUNCA dentro do projeto)
         script: |
-          flutter create --platforms=android --org com.example --project-name plate_scanner_app .
+          TEMP_SCAFFOLD=$(mktemp -d)
+          flutter create --platforms=android --org com.example --project-name plate_scanner_app "$TEMP_SCAFFOLD/scaffold"
+          cp -rn "$TEMP_SCAFFOLD/scaffold/android/." android/
+          rm -rf "$TEMP_SCAFFOLD"
 
       - name: Restaurar configuração customizada (se foi salva)
         script: |
